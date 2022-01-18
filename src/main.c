@@ -2,7 +2,9 @@
 #include "milis.h"
 
 /*#include "delay.h"*/
+//#include <cstdint>
 #include <stdio.h>
+#include "spse_stm8.h"
 #include "../lib/uart.c"
 
 #define _ISOC99_SOURCE
@@ -24,22 +26,54 @@ void setup(void)
     CLK_HSIPrescalerConfig(CLK_PRESCALER_HSIDIV1);      // taktovani MCU na 16MHz
     GPIO_Init(LED_PORT, LED_PIN, GPIO_MODE_OUT_PP_LOW_SLOW);
     init_milis();
+    init_uart();
+
+
+    // na pinech/vstupech ADC_IN2 (PB2) a ADC_IN3 (PB3) vypneme vstupní buffer
+    ADC2_SchmittTriggerConfig(ADC2_SCHMITTTRIG_CHANNEL4, DISABLE);
+    ADC2_SchmittTriggerConfig(ADC2_SCHMITTTRIG_CHANNEL5, DISABLE);
+
+    // při inicializaci volíme frekvenci AD převodníku mezi 1-4MHz při 3.3V
+    // mezi 1-6MHz při 5V napájení
+    // nastavíme clock pro ADC (16MHz / 4 = 4MHz)
+    ADC2_PrescalerConfig(ADC2_PRESSEL_FCPU_D4);
+
+    // volíme zarovnání výsledku (typicky vpravo, jen vyjmečně je výhodné vlevo)
+    ADC2_AlignConfig(ADC2_ALIGN_RIGHT);
+
+    // nasatvíme multiplexer na některý ze vstupních kanálů
+    ADC2_Select_Channel(ADC2_CHANNEL_4);
+    // rozběhneme AD převodník
+    ADC2_Cmd(ENABLE);  
+    // počkáme než se AD převodník rozběhne (~7us)
+    ADC2_Startup_Wait();  
+
 }
+
 
 
 int main(void)
 {
     uint32_t time = 0;
+    uint16_t rawADC = 0;
+    uint32_t napeti = 0;
+    uint32_t teplota = 0;
 
     setup();
-    init_uart();
 
     while (1) {
 
-        if (milis() - time > 1000 && BTN_PUSH) {
+        if (milis() - time > 1000 ) {
             LED_TOGG; 
             time = milis();
-            printf("ahoj\r\n");
+            rawADC = ADC_get(ADC2_CHANNEL_4);
+            napeti = rawADC * (uint32_t)3300 / 1024;
+            teplota = (napeti - 0.4) / 0.0195;
+
+
+            printf("rawADC je %d\r\n", rawADC);
+            printf("napeti je %ld\r\n", napeti);
+            printf("teplota je %ld\r\n", teplota);
         }
 
         /*LED_FLIP; */
